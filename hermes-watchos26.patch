@@ -1,0 +1,59 @@
+diff --git a/HermesEnabler2.xcodeproj/project.pbxproj b/HermesEnabler2.xcodeproj/project.pbxproj
+--- a/HermesEnabler2.xcodeproj/project.pbxproj
++++ b/HermesEnabler2.xcodeproj/project.pbxproj
+@@ -293,7 +293,7 @@
+ 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+ 				SWIFT_VERSION = 5.0;
+ 				TARGETED_DEVICE_FAMILY = 4;
+-				WATCHOS_DEPLOYMENT_TARGET = 26.0;
++				WATCHOS_DEPLOYMENT_TARGET = 26.6;
+ 			};
+ 			name = Debug;
+ 		};
+@@ -375,7 +375,7 @@
+ 				SWIFT_VERSION = 5.0;
+ 				TARGETED_DEVICE_FAMILY = 4;
+ 				VALIDATE_PRODUCT = YES;
+-				WATCHOS_DEPLOYMENT_TARGET = 26.0;
++				WATCHOS_DEPLOYMENT_TARGET = 26.6;
+ 			};
+ 			name = Release;
+ 		};
+
+diff --git a/HermesEnabler2/BQCore.m b/HermesEnabler2/BQCore.m
+--- a/HermesEnabler2/BQCore.m
++++ b/HermesEnabler2/BQCore.m
+@@ -322,6 +322,9 @@
+                                   withIntermediateDirectories:YES attributes:nil error:nil];
+         if (gLogPath) [[NSFileManager defaultManager] createFileAtPath:gLogPath contents:nil attributes:nil];
+         NSUserDefaults *defs = [NSUserDefaults standardUserDefaults];
++        if ([defs objectForKey:@"BQClass2ParentEnabled"] == nil) {
++            [defs setBool:YES forKey:@"BQClass2ParentEnabled"];
++        }
+         gClass2ParentEnabled = [defs boolForKey:@"BQClass2ParentEnabled"];
+         if (gClass2ParentEnabled && [defs boolForKey:@"BQClass2ParentCrashGuard"]) {
+             gClass2ParentEnabled = NO;
+@@ -655,6 +658,23 @@
+                 BQLog(@"escape: using bad_query traversal -> %@", p ?: target);
+                 return h;
+             }
++            // WatchOS 26.6.x extended traversal & flag probe
++            NSArray<NSNumber *> *extraDots = @[@6, @10, @12, @14];
++            uint64_t extraFlags[2] = { 0x8100000000ULL, 0x0800000000ULL };
++            for (NSNumber *dotCount in extraDots) {
++                NSString *altDomain = [bq_dots(dotCount.intValue) stringByAppendingString:target];
++                for (int fi = 0; fi < 2; fi++) {
++                    NSString *altPath = nil;
++                    int64_t altHandle = bq_query_escape(13, kMGGroup, YES, 3, altDomain, extraFlags[fi],
++                                                        [NSString stringWithFormat:@"class13-26x-d%@-f%d", dotCount, fi], &altPath);
++                    if (altHandle >= 0) {
++                        gTraversalState = 1;
++                        if (linkOut) *linkOut = altPath ?: target;
++                        BQLog(@"escape: using extended 26.x traversal (%@ / %#llx) -> %@", dotCount, extraFlags[fi], altPath ?: target);
++                        return altHandle;
++                    }
++                }
++            }
+         }
+         gTraversalState = -1;
+         last = h;

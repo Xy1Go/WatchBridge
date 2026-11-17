@@ -1,0 +1,67 @@
+name: Build HermesEnabler IPA (watchOS 26.6.1)
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_id:
+        description: 'Custom iOS Companion Bundle ID (Watch ID appends .watchkitapp)'
+        required: true
+        default: 'com.custom.HermesEnabler'
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-unsigned-ipa:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode with WatchOS 26 SDK
+        run: |
+          SELECTED_XCODE=""
+          for app in $(ls -dt /Applications/Xcode*.app 2>/dev/null); do
+            if "$app/Contents/Developer/usr/bin/xcodebuild" -showsdks 2>/dev/null | grep -qi "watchos26\|watchos"; then
+              SELECTED_XCODE="$app"
+              if "$app/Contents/Developer/usr/bin/xcodebuild" -showsdks 2>/dev/null | grep -qi "watchos26"; then
+                break
+              fi
+            fi
+          done
+          if [ -z "$SELECTED_XCODE" ]; then
+            SELECTED_XCODE="/Applications/Xcode.app"
+          fi
+          echo "Selected Xcode: $SELECTED_XCODE"
+          sudo xcode-select -s "$SELECTED_XCODE/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Apply watchOS 26.6.1 Adaptation Patch
+        run: |
+          if [ -f "patches/hermes-watchos26.patch" ]; then
+            git apply --check patches/hermes-watchos26.patch
+            git apply patches/hermes-watchos26.patch
+          else
+            echo "No patch file found at patches/hermes-watchos26.patch, building upstream source directly."
+          fi
+
+      - name: Build Unsigned IPA for Windows WatchBridge
+        run: |
+          chmod +x scripts/create_ipa.sh
+          ./scripts/create_ipa.sh \
+            --bundle-id "${{ inputs.bundle_id || 'com.custom.HermesEnabler' }}" \
+            --output "build/ipa/HermesEnabler-watchOS26.6.1.ipa"
+
+      - name: Verify Embedded WatchKit App Structure
+        run: |
+          ls -lh build/ipa/
+          unzip -l "build/ipa/HermesEnabler-watchOS26.6.1.ipa" | grep -E "Payload/HermesCompanion\.app/Watch/"
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HermesEnabler-watchOS26.6.1-WatchBridge
+          path: build/ipa/*.ipa
+          retention-days: 14
